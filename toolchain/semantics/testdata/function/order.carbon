@@ -4,27 +4,48 @@
 //
 // AUTOUPDATE
 // RUN: %{carbon-run-semantics}
-// CHECK:STDOUT: identifiers = {
-// CHECK:STDOUT:   %s0 = "Foo";
-// CHECK:STDOUT:   %s1 = "Bar";
-// CHECK:STDOUT:   %s2 = "Baz";
-// CHECK:STDOUT: },
-// CHECK:STDOUT: integer_literals = {
-// CHECK:STDOUT: },
-// CHECK:STDOUT: nodes = {
-// CHECK:STDOUT:   %0 = Identifier(%s0);
-// CHECK:STDOUT:   %1 = FunctionDeclaration(%0);
-// CHECK:STDOUT:   %2 = FunctionDefinitionStart(%1);
-// CHECK:STDOUT:   %3 = FunctionDefinitionEnd();
-// CHECK:STDOUT:   %4 = Identifier(%s1);
-// CHECK:STDOUT:   %5 = FunctionDeclaration(%4);
-// CHECK:STDOUT:   %6 = FunctionDefinitionStart(%5);
-// CHECK:STDOUT:   %7 = FunctionDefinitionEnd();
-// CHECK:STDOUT:   %8 = Identifier(%s2);
-// CHECK:STDOUT:   %9 = FunctionDeclaration(%8);
-// CHECK:STDOUT:   %10 = FunctionDefinitionStart(%9);
-// CHECK:STDOUT:   %11 = FunctionDefinitionEnd();
-// CHECK:STDOUT: }
+// CHECK:STDOUT: cross_reference_irs_size: 1
+// CHECK:STDOUT: integer_literals: [
+// CHECK:STDOUT: ]
+// CHECK:STDOUT: strings: [
+// CHECK:STDOUT:   Foo,
+// CHECK:STDOUT:   Bar,
+// CHECK:STDOUT:   Baz,
+// CHECK:STDOUT: ]
+// CHECK:STDOUT: nodes: [
+// CHECK:STDOUT:   {kind: CrossReference, arg0: ir0, arg1: block0, type: node0},
+// CHECK:STDOUT:   {kind: CrossReference, arg0: ir0, arg1: block1, type: node1},
+// CHECK:STDOUT:   {kind: CrossReference, arg0: ir0, arg1: block2, type: node0},
+// CHECK:STDOUT:   {kind: CrossReference, arg0: ir0, arg1: block3, type: node0},
+// CHECK:STDOUT:   {kind: FunctionDeclaration},
+// CHECK:STDOUT:   {kind: BindName, arg0: str0, arg1: node4},
+// CHECK:STDOUT:   {kind: FunctionDefinition, arg0: node4, arg1: block1},
+// CHECK:STDOUT:   {kind: FunctionDeclaration},
+// CHECK:STDOUT:   {kind: BindName, arg0: str1, arg1: node7},
+// CHECK:STDOUT:   {kind: FunctionDefinition, arg0: node7, arg1: block2},
+// CHECK:STDOUT:   {kind: FunctionDeclaration},
+// CHECK:STDOUT:   {kind: BindName, arg0: str2, arg1: node10},
+// CHECK:STDOUT:   {kind: FunctionDefinition, arg0: node10, arg1: block3},
+// CHECK:STDOUT: ]
+// CHECK:STDOUT: node_blocks: [
+// CHECK:STDOUT:   [
+// CHECK:STDOUT:     node4,
+// CHECK:STDOUT:     node5,
+// CHECK:STDOUT:     node6,
+// CHECK:STDOUT:     node7,
+// CHECK:STDOUT:     node8,
+// CHECK:STDOUT:     node9,
+// CHECK:STDOUT:     node10,
+// CHECK:STDOUT:     node11,
+// CHECK:STDOUT:     node12,
+// CHECK:STDOUT:   ],
+// CHECK:STDOUT:   [
+// CHECK:STDOUT:   ],
+// CHECK:STDOUT:   [
+// CHECK:STDOUT:   ],
+// CHECK:STDOUT:   [
+// CHECK:STDOUT:   ],
+// CHECK:STDOUT: ]
 
 fn Foo() {}
 fn Bar() {}

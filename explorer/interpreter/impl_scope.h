@@ -22,13 +22,13 @@ class TypeChecker;
 // can vary from scope to scope. For example, consider the `bar` and
 // `baz` methods in the following class C and nested class D.
 //
-//     class C(U:! Type, T:! Type)  {
-//       class D(V:! Type where U is Fooable(T)) {
-//         fn bar[me: Self](x: U, y : T) -> T{
+//     class C(U:! type, T:! type)  {
+//       class D(V:! type where U is Fooable(T)) {
+//         fn bar[self: Self](x: U, y : T) -> T{
 //           return x.foo(y)
 //         }
 //       }
-//       fn baz[me: Self](x: U, y : T) -> T {
+//       fn baz[self: Self](x: U, y : T) -> T {
 //         return x.foo(y);
 //       }
 //     }

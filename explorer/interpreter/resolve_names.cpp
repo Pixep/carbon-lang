@@ -22,8 +22,9 @@ namespace Carbon {
 static auto AddExposedNames(const Declaration& declaration,
                             StaticScope& enclosing_scope) -> ErrorOr<Success> {
   switch (declaration.kind()) {
-    case DeclarationKind::InterfaceDeclaration: {
-      const auto& iface_decl = cast<InterfaceDeclaration>(declaration);
+    case DeclarationKind::InterfaceDeclaration:
+    case DeclarationKind::ConstraintDeclaration: {
+      const auto& iface_decl = cast<ConstraintTypeDeclaration>(declaration);
       CARBON_RETURN_IF_ERROR(
           enclosing_scope.Add(iface_decl.name(), &iface_decl,
                               StaticScope::NameStatus::KnownButNotDeclared));
@@ -77,8 +78,7 @@ static auto AddExposedNames(const Declaration& declaration,
     case DeclarationKind::AssociatedConstantDeclaration: {
       const auto& let = cast<AssociatedConstantDeclaration>(declaration);
       if (let.binding().name() != AnonymousName) {
-        CARBON_RETURN_IF_ERROR(
-            enclosing_scope.Add(let.binding().name(), &let.binding()));
+        CARBON_RETURN_IF_ERROR(enclosing_scope.Add(let.binding().name(), &let));
       }
       break;
     }
@@ -94,6 +94,7 @@ static auto AddExposedNames(const Declaration& declaration,
       break;
     }
     case DeclarationKind::ImplDeclaration:
+    case DeclarationKind::MatchFirstDeclaration:
     case DeclarationKind::MixDeclaration:
     case DeclarationKind::InterfaceExtendsDeclaration:
     case DeclarationKind::InterfaceImplDeclaration: {
@@ -239,6 +240,14 @@ static auto ResolveNames(Expression& expression,
       auto& where = cast<WhereExpression>(expression);
       CARBON_RETURN_IF_ERROR(
           ResolveNames(where.self_binding().type(), enclosing_scope));
+      // If we're already in a `.Self` context, remember it so that we can
+      // reuse its value for the inner `.Self`.
+      if (auto enclosing_dot_self =
+              enclosing_scope.Resolve(".Self", where.source_loc());
+          enclosing_dot_self.ok()) {
+        where.set_enclosing_dot_self(
+            &cast<GenericBinding>(enclosing_dot_self->base()));
+      }
       // Introduce `.Self` into scope on the right of the `where` keyword.
       StaticScope where_scope;
       where_scope.AddParent(&enclosing_scope);
@@ -264,8 +273,11 @@ static auto ResolveNames(Expression& expression,
     case ExpressionKind::StringLiteral:
     case ExpressionKind::StringTypeLiteral:
     case ExpressionKind::TypeTypeLiteral:
-    case ExpressionKind::ValueLiteral:
       break;
+    case ExpressionKind::ValueLiteral:
+    case ExpressionKind::BuiltinConvertExpression:
+    case ExpressionKind::BaseAccessExpression:
+      CARBON_FATAL() << "should not exist before type checking";
     case ExpressionKind::UnimplementedExpression:
       return ProgramError(expression.source_loc()) << "Unimplemented";
   }
@@ -366,6 +378,11 @@ static auto ResolveNames(Statement& statement, StaticScope& enclosing_scope)
       auto& assign = cast<Assign>(statement);
       CARBON_RETURN_IF_ERROR(ResolveNames(assign.lhs(), enclosing_scope));
       CARBON_RETURN_IF_ERROR(ResolveNames(assign.rhs(), enclosing_scope));
+      break;
+    }
+    case StatementKind::IncrementDecrement: {
+      auto& inc_dec = cast<IncrementDecrement>(statement);
+      CARBON_RETURN_IF_ERROR(ResolveNames(inc_dec.argument(), enclosing_scope));
       break;
     }
     case StatementKind::VariableDefinition: {
@@ -508,8 +525,9 @@ static auto ResolveMemberNames(llvm::ArrayRef<Nonnull<Declaration*>> members,
 static auto ResolveNames(Declaration& declaration, StaticScope& enclosing_scope,
                          ResolveFunctionBodies bodies) -> ErrorOr<Success> {
   switch (declaration.kind()) {
-    case DeclarationKind::InterfaceDeclaration: {
-      auto& iface = cast<InterfaceDeclaration>(declaration);
+    case DeclarationKind::InterfaceDeclaration:
+    case DeclarationKind::ConstraintDeclaration: {
+      auto& iface = cast<ConstraintTypeDeclaration>(declaration);
       StaticScope iface_scope;
       iface_scope.AddParent(&enclosing_scope);
       enclosing_scope.MarkDeclared(iface.name());
@@ -518,7 +536,7 @@ static auto ResolveNames(Declaration& declaration, StaticScope& enclosing_scope,
       }
       enclosing_scope.MarkUsable(iface.name());
       // Don't resolve names in the type of the self binding. The
-      // InterfaceDeclaration constructor already did that.
+      // ConstraintTypeDeclaration constructor already did that.
       CARBON_RETURN_IF_ERROR(iface_scope.Add("Self", iface.self()));
       CARBON_RETURN_IF_ERROR(
           ResolveMemberNames(iface.members(), iface_scope, bodies));
@@ -546,6 +564,13 @@ static auto ResolveNames(Declaration& declaration, StaticScope& enclosing_scope,
           ResolveMemberNames(impl.members(), impl_scope, bodies));
       break;
     }
+    case DeclarationKind::MatchFirstDeclaration: {
+      // A `match_first` declaration does not introduce a scope.
+      for (auto* impl : cast<MatchFirstDeclaration>(declaration).impls()) {
+        CARBON_RETURN_IF_ERROR(ResolveNames(*impl, enclosing_scope, bodies));
+      }
+      break;
+    }
     case DeclarationKind::DestructorDeclaration:
     case DeclarationKind::FunctionDeclaration: {
       auto& function = cast<CallableDeclaration>(declaration);
@@ -557,7 +582,7 @@ static auto ResolveNames(Declaration& declaration, StaticScope& enclosing_scope,
       }
       if (function.is_method()) {
         CARBON_RETURN_IF_ERROR(
-            ResolveNames(function.me_pattern(), function_scope));
+            ResolveNames(function.self_pattern(), function_scope));
       }
       CARBON_RETURN_IF_ERROR(
           ResolveNames(function.param_pattern(), function_scope));
@@ -658,7 +683,9 @@ static auto ResolveNames(Declaration& declaration, StaticScope& enclosing_scope,
     }
     case DeclarationKind::AssociatedConstantDeclaration: {
       auto& let = cast<AssociatedConstantDeclaration>(declaration);
-      CARBON_RETURN_IF_ERROR(ResolveNames(let.binding(), enclosing_scope));
+      StaticScope constant_scope;
+      constant_scope.AddParent(&enclosing_scope);
+      CARBON_RETURN_IF_ERROR(ResolveNames(let.binding(), constant_scope));
       break;
     }
 

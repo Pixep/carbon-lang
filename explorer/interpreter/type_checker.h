@@ -60,12 +60,13 @@ class TypeChecker {
                  SourceLocation source_loc) const
       -> std::optional<Nonnull<const Witness*>>;
 
-  // Return the declaration of the member with the given name, from the class
-  // and its parents
+  // Return the declaration of the member with the given name and the class type
+  // that owns it, from the class and its parents
   auto FindMemberWithParents(std::string_view name,
-                             Nonnull<const NominalClassType*> enclosing_type)
+                             Nonnull<const NominalClassType*> enclosing_class)
       -> ErrorOr<std::optional<
-          std::pair<Nonnull<const Value*>, Nonnull<const Declaration*>>>>;
+          std::tuple<Nonnull<const Value*>, Nonnull<const Declaration*>,
+                     Nonnull<const NominalClassType*>>>>;
 
   // Finds the direct or indirect member of a class or mixin by its name and
   // returns the member's declaration and type. Indirect members are members of
@@ -91,9 +92,16 @@ class TypeChecker {
                                    int impl_offset) const
       -> Nonnull<const Witness*>;
 
+  // Determine whether the given intrinsic constraint is known to be satisfied
+  // in the given scope.
+  auto IsIntrinsicConstraintSatisfied(const IntrinsicConstraint& constraint,
+                                      const ImplScope& impl_scope) const
+      -> bool;
+
  private:
   class ConstraintTypeBuilder;
   class SubstitutedGenericBindings;
+  class SubstituteTransform;
   class ArgumentDeduction;
 
   // Information about the currently enclosing scopes.
@@ -129,6 +137,14 @@ class TypeChecker {
     Nonnull<const Declaration*> member;
   };
 
+  // Checks a member access that might be accessing a function taking `addr
+  // self: Self*`. If it does, this function marks the member access accordingly
+  // and ensures the object argument is an lvalue.
+  auto CheckAddrMeAccess(Nonnull<MemberAccessExpression*> access,
+                         Nonnull<const FunctionDeclaration*> func_decl,
+                         const Bindings& bindings, const ImplScope& impl_scope)
+      -> ErrorOr<Success>;
+
   // Traverses the AST rooted at `e`, populating the static_type() of all nodes
   // and ensuring they follow Carbon's typing rules.
   //
@@ -159,6 +175,13 @@ class TypeChecker {
                         std::optional<Nonnull<const Value*>> expected,
                         ImplScope& impl_scope,
                         ValueCategory enclosing_value_category)
+      -> ErrorOr<Success>;
+
+  // Type checks a generic binding. `symbolic_value` is the symbolic name by
+  // which this generic binding is known in its scope. `impl_scope` is updated
+  // with the impl implied by the binding, if any.
+  auto TypeCheckGenericBinding(GenericBinding& binding,
+                               std::string_view context, ImplScope& impl_scope)
       -> ErrorOr<Success>;
 
   // Equivalent to TypeCheckExp, but operates on the AST rooted at `s`.
@@ -203,9 +226,9 @@ class TypeChecker {
   auto DeclareMixinDeclaration(Nonnull<MixinDeclaration*> mixin_decl,
                                const ScopeInfo& scope_info) -> ErrorOr<Success>;
 
-  auto DeclareInterfaceDeclaration(Nonnull<InterfaceDeclaration*> iface_decl,
-                                   const ScopeInfo& scope_info)
-      -> ErrorOr<Success>;
+  auto DeclareConstraintTypeDeclaration(
+      Nonnull<ConstraintTypeDeclaration*> constraint_decl,
+      const ScopeInfo& scope_info) -> ErrorOr<Success>;
 
   // Check that the deduced parameters of an impl are actually deducible from
   // the form of the interface, for a declaration of the form
@@ -300,10 +323,10 @@ class TypeChecker {
       std::optional<Nonnull<const Declaration*>> enclosing_decl)
       -> ErrorOr<Success>;
 
-  // Type check all the members of the interface.
-  auto TypeCheckInterfaceDeclaration(Nonnull<InterfaceDeclaration*> iface_decl,
-                                     const ImplScope& impl_scope)
-      -> ErrorOr<Success>;
+  // Type check all the members of the interface or named constraint.
+  auto TypeCheckConstraintTypeDeclaration(
+      Nonnull<ConstraintTypeDeclaration*> constraint_decl,
+      const ImplScope& impl_scope) -> ErrorOr<Success>;
 
   // Bring the associated constants in `constraint` that constrain the
   // implementation of `interface` for `self` into `scope`.
@@ -326,13 +349,12 @@ class TypeChecker {
   auto ExpectReturnOnAllPaths(std::optional<Nonnull<Statement*>> opt_stmt,
                               SourceLocation source_loc) -> ErrorOr<Success>;
 
-  // Verifies that *value represents a concrete type, as opposed to a
-  // type pattern or a non-type value.
-  auto ExpectIsConcreteType(SourceLocation source_loc,
-                            Nonnull<const Value*> value) -> ErrorOr<Success>;
-
   // Returns the field names of the class together with their types.
   auto FieldTypes(const NominalClassType& class_type) const
+      -> std::vector<NamedValue>;
+
+  // Returns the field names and types of the class and its parents.
+  auto FieldTypesWithBase(const NominalClassType& class_type) const
       -> std::vector<NamedValue>;
 
   // Returns true if source_fields and destination_fields contain the same set
@@ -363,6 +385,17 @@ class TypeChecker {
                          Nonnull<const Value*> destination)
       -> ErrorOr<Nonnull<Expression*>>;
 
+  // Checks that the given type is not a placeholder type. Diagnoses otherwise.
+  auto ExpectNonPlaceholderType(SourceLocation source_loc,
+                                Nonnull<const Value*> type) -> ErrorOr<Success>;
+
+  // Build and return class subtyping conversion expression, converting from
+  // `src_ptr` to `dest_ptr`.
+  auto BuildSubtypeConversion(Nonnull<Expression*> source,
+                              Nonnull<const PointerType*> src_ptr,
+                              Nonnull<const PointerType*> dest_ptr)
+      -> ErrorOr<Nonnull<const Expression*>>;
+
   // Determine whether `type1` and `type2` are considered to be the same type
   // in the given scope. This is true if they're structurally identical or if
   // there is an equality relation in scope that specifies that they are the
@@ -385,6 +418,17 @@ class TypeChecker {
                        Nonnull<const Value*> expected,
                        Nonnull<const Value*> actual,
                        const ImplScope& impl_scope) const -> ErrorOr<Success>;
+
+  // Rebuild a value in the current type-checking context. Applies any rewrites
+  // that are in scope and attempts to resolve associated constants using impls
+  // that have been declared since the value was formed.
+  auto RebuildValue(Nonnull<const Value*> value) const -> Nonnull<const Value*>;
+
+  // Implementation of Substitute and RebuildValue. Does not check that
+  // bindings are nonempty, nor does it trace its progress.
+  auto SubstituteImpl(const Bindings& bindings,
+                      Nonnull<const Value*> type) const
+      -> Nonnull<const Value*>;
 
   // The name of a builtin interface, with any arguments.
   struct BuiltinInterfaceName {
@@ -410,12 +454,6 @@ class TypeChecker {
   auto GetBuiltinInterfaceType(SourceLocation source_loc,
                                BuiltinInterfaceName interface) const
       -> ErrorOr<Nonnull<const InterfaceType*>>;
-
-  // Given an interface type, form a corresponding constraint type. The
-  // interface must be a complete type.
-  auto MakeConstraintForInterface(
-      SourceLocation source_loc, Nonnull<const InterfaceType*> iface_type) const
-      -> ErrorOr<Nonnull<const ConstraintType*>>;
 
   // Convert a value that is expected to represent a constraint into a
   // `ConstraintType`.
@@ -479,9 +517,9 @@ class TypeChecker {
   // symbolic witness into an impl witness during substitution.
   std::optional<const ImplScope*> top_level_impl_scope_;
 
-  // `where` expressions that are currently being built. These may have
+  // Constraint types that are currently being resolved. These may have
   // rewrites that are not yet visible in any type.
-  std::vector<ConstraintTypeBuilder*> partial_where_expressions_;
+  std::vector<ConstraintTypeBuilder*> partial_constraint_types_;
 };
 
 }  // namespace Carbon

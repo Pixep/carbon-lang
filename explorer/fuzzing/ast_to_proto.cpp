@@ -89,6 +89,34 @@ static auto OperatorToProtoEnum(const Operator op)
   }
 }
 
+static auto AssignOperatorToProtoEnum(const AssignOperator op)
+    -> Fuzzing::AssignStatement::Operator {
+  switch (op) {
+    case AssignOperator::Plain:
+      return Fuzzing::AssignStatement::Plain;
+    case AssignOperator::Add:
+      return Fuzzing::AssignStatement::Add;
+    case AssignOperator::And:
+      return Fuzzing::AssignStatement::And;
+    case AssignOperator::Mul:
+      return Fuzzing::AssignStatement::Mul;
+    case AssignOperator::Div:
+      return Fuzzing::AssignStatement::Div;
+    case AssignOperator::Mod:
+      return Fuzzing::AssignStatement::Mod;
+    case AssignOperator::Or:
+      return Fuzzing::AssignStatement::Or;
+    case AssignOperator::ShiftLeft:
+      return Fuzzing::AssignStatement::ShiftLeft;
+    case AssignOperator::ShiftRight:
+      return Fuzzing::AssignStatement::ShiftRight;
+    case AssignOperator::Sub:
+      return Fuzzing::AssignStatement::Sub;
+    case AssignOperator::Xor:
+      return Fuzzing::AssignStatement::Xor;
+  }
+}
+
 static auto FieldInitializerToProto(const FieldInitializer& field)
     -> Fuzzing::FieldInitializer {
   Fuzzing::FieldInitializer field_proto;
@@ -110,8 +138,15 @@ static auto ExpressionToProto(const Expression& expression)
     -> Fuzzing::Expression {
   Fuzzing::Expression expression_proto;
   switch (expression.kind()) {
+    case ExpressionKind::BaseAccessExpression:
     case ExpressionKind::ValueLiteral: {
       // This does not correspond to source syntax.
+      break;
+    }
+
+    case ExpressionKind::BuiltinConvertExpression: {
+      expression_proto = ExpressionToProto(
+          *cast<BuiltinConvertExpression>(expression).source_expression());
       break;
     }
 
@@ -428,6 +463,15 @@ static auto StatementToProto(const Statement& statement) -> Fuzzing::Statement {
       auto* assign_proto = statement_proto.mutable_assign();
       *assign_proto->mutable_lhs() = ExpressionToProto(assign.lhs());
       *assign_proto->mutable_rhs() = ExpressionToProto(assign.rhs());
+      assign_proto->set_op(AssignOperatorToProtoEnum(assign.op()));
+      break;
+    }
+
+    case StatementKind::IncrementDecrement: {
+      const auto& inc_dec = cast<IncrementDecrement>(statement);
+      auto* inc_dec_proto = statement_proto.mutable_inc_dec();
+      *inc_dec_proto->mutable_operand() = ExpressionToProto(inc_dec.argument());
+      inc_dec_proto->set_is_increment(inc_dec.is_increment());
       break;
     }
 
@@ -578,21 +622,22 @@ static auto DeclarationToProto(const Declaration& declaration)
       const auto& function = cast<DestructorDeclaration>(declaration);
       auto* function_proto = declaration_proto.mutable_destructor();
       if (function.is_method()) {
-        switch (function.me_pattern().kind()) {
+        switch (function.self_pattern().kind()) {
           case PatternKind::AddrPattern:
-            *function_proto->mutable_me_pattern() =
-                PatternToProto(cast<AddrPattern>(function.me_pattern()));
+            *function_proto->mutable_self_pattern() =
+                PatternToProto(cast<AddrPattern>(function.self_pattern()));
             break;
           case PatternKind::BindingPattern:
-            *function_proto->mutable_me_pattern() =
-                PatternToProto(cast<BindingPattern>(function.me_pattern()));
+            *function_proto->mutable_self_pattern() =
+                PatternToProto(cast<BindingPattern>(function.self_pattern()));
             break;
           default:
-            // Parser shouldn't allow me_pattern to be anything other than
+            // Parser shouldn't allow self_pattern to be anything other than
             // AddrPattern or BindingPattern
-            CARBON_FATAL() << "me_pattern in method declaration can be either "
-                              "AddrPattern or BindingPattern. Actual pattern: "
-                           << function.me_pattern();
+            CARBON_FATAL()
+                << "self_pattern in method declaration can be either "
+                   "AddrPattern or BindingPattern. Actual pattern: "
+                << function.self_pattern();
             break;
         }
       }
@@ -613,21 +658,22 @@ static auto DeclarationToProto(const Declaration& declaration)
             GenericBindingToProto(*binding);
       }
       if (function.is_method()) {
-        switch (function.me_pattern().kind()) {
+        switch (function.self_pattern().kind()) {
           case PatternKind::AddrPattern:
-            *function_proto->mutable_me_pattern() =
-                PatternToProto(cast<AddrPattern>(function.me_pattern()));
+            *function_proto->mutable_self_pattern() =
+                PatternToProto(cast<AddrPattern>(function.self_pattern()));
             break;
           case PatternKind::BindingPattern:
-            *function_proto->mutable_me_pattern() =
-                PatternToProto(cast<BindingPattern>(function.me_pattern()));
+            *function_proto->mutable_self_pattern() =
+                PatternToProto(cast<BindingPattern>(function.self_pattern()));
             break;
           default:
-            // Parser shouldn't allow me_pattern to be anything other than
+            // Parser shouldn't allow self_pattern to be anything other than
             // AddrPattern or BindingPattern
-            CARBON_FATAL() << "me_pattern in method declaration can be either "
-                              "AddrPattern or BindingPattern. Actual pattern: "
-                           << function.me_pattern();
+            CARBON_FATAL()
+                << "self_pattern in method declaration can be either "
+                   "AddrPattern or BindingPattern. Actual pattern: "
+                << function.self_pattern();
             break;
         }
       }
@@ -733,8 +779,16 @@ static auto DeclarationToProto(const Declaration& declaration)
       for (const auto& member : interface.members()) {
         *interface_proto->add_members() = DeclarationToProto(*member);
       }
-      *interface_proto->mutable_self() =
-          GenericBindingToProto(*interface.self());
+      break;
+    }
+
+    case DeclarationKind::ConstraintDeclaration: {
+      const auto& constraint = cast<ConstraintDeclaration>(declaration);
+      auto* constraint_proto = declaration_proto.mutable_constraint();
+      constraint_proto->set_name(constraint.name());
+      for (const auto& member : constraint.members()) {
+        *constraint_proto->add_members() = DeclarationToProto(*member);
+      }
       break;
     }
 
@@ -753,6 +807,15 @@ static auto DeclarationToProto(const Declaration& declaration)
       *impl_proto->mutable_interface() = ExpressionToProto(impl.interface());
       for (const auto& member : impl.members()) {
         *impl_proto->add_members() = DeclarationToProto(*member);
+      }
+      break;
+    }
+
+    case DeclarationKind::MatchFirstDeclaration: {
+      const auto& match_first = cast<MatchFirstDeclaration>(declaration);
+      auto* match_first_proto = declaration_proto.mutable_match_first();
+      for (const auto* impl : match_first.impls()) {
+        *match_first_proto->add_impls() = DeclarationToProto(*impl);
       }
       break;
     }
