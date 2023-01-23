@@ -6,6 +6,7 @@
 
 #include <llvm/Support/raw_ostream.h>
 
+#include <algorithm>
 #include <iterator>
 #include <map>
 #include <memory>
@@ -1788,47 +1789,52 @@ auto Interpreter::StepStmt() -> ErrorOr<Success> {
         return todo_.Spawn(
             std::make_unique<ExpressionAction>(&cast<For>(stmt).loop_target()));
       }
-      if (act.pos() == 1) {
-        const auto* source_array =
-            cast<TupleValue>(act.results()[TargetVarPosInResult]);
-
-        int start_index = 0;
-        auto end_index = static_cast<int>(source_array->elements().size());
-        if (end_index == 0) {
-          return todo_.FinishAction();
-        }
-        act.AddResult(arena_->New<IntValue>(start_index));
-        act.AddResult(arena_->New<IntValue>(end_index));
-        todo_.Initialize(*(loop_var->value_node()),
-                         source_array->elements()[start_index]);
-        act.ReplaceResult(CurrentIndexPosInResult,
-                          arena_->New<IntValue>(start_index + 1));
-        return todo_.Spawn(
-            std::make_unique<StatementAction>(&cast<For>(stmt).body()));
-      }
-      if (act.pos() >= 2) {
-        auto current_index =
-            cast<IntValue>(act.results()[CurrentIndexPosInResult])->value();
-        auto end_index =
-            cast<IntValue>(act.results()[EndIndexPosInResult])->value();
-
-        if (current_index < end_index) {
-          const auto* source_array =
-              cast<const TupleValue>(act.results()[TargetVarPosInResult]);
-
-          CARBON_ASSIGN_OR_RETURN(
-              Nonnull<const Value*> assigned_array_element,
-              todo_.ValueOfNode(*(loop_var->value_node()), stmt.source_loc()));
-
-          const auto* lvalue = cast<LValue>(assigned_array_element);
-          CARBON_RETURN_IF_ERROR(heap_.Write(
-              lvalue->address(), source_array->elements()[current_index],
-              stmt.source_loc()));
-
+      const auto* target = act.results()[TargetVarPosInResult];
+      if (const auto* source_array = dyn_cast<TupleValue>(target)) {
+        if (act.pos() == 1) {
+          int start_index = 0;
+          auto end_index = static_cast<int>(source_array->elements().size());
+          if (end_index == 0) {
+            return todo_.FinishAction();
+          }
+          act.AddResult(arena_->New<IntValue>(start_index));
+          act.AddResult(arena_->New<IntValue>(end_index));
+          todo_.Initialize(*(loop_var->value_node()),
+                           source_array->elements()[start_index]);
           act.ReplaceResult(CurrentIndexPosInResult,
-                            arena_->New<IntValue>(current_index + 1));
+                            arena_->New<IntValue>(start_index + 1));
           return todo_.Spawn(
               std::make_unique<StatementAction>(&cast<For>(stmt).body()));
+        } else {
+          auto current_index =
+              cast<IntValue>(act.results()[CurrentIndexPosInResult])->value();
+          auto end_index =
+              cast<IntValue>(act.results()[EndIndexPosInResult])->value();
+
+          if (current_index < end_index) {
+            const auto* source_array =
+                cast<const TupleValue>(act.results()[TargetVarPosInResult]);
+
+            CARBON_ASSIGN_OR_RETURN(
+                Nonnull<const Value*> assigned_array_element,
+                todo_.ValueOfNode(*(loop_var->value_node()),
+                                  stmt.source_loc()));
+
+            const auto* lvalue = cast<LValue>(assigned_array_element);
+            CARBON_RETURN_IF_ERROR(heap_.Write(
+                lvalue->address(), source_array->elements()[current_index],
+                stmt.source_loc()));
+
+            act.ReplaceResult(CurrentIndexPosInResult,
+                              arena_->New<IntValue>(current_index + 1));
+            return todo_.Spawn(
+                std::make_unique<StatementAction>(&cast<For>(stmt).body()));
+          }
+        }
+      } else {
+        const auto* dest_class = cast<NominalClassValue>(target);
+        if (act.pos() == 1) {
+        } else {
         }
       }
       return todo_.FinishAction();

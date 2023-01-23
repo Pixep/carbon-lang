@@ -4194,15 +4194,27 @@ auto TypeChecker::TypeCheckStmt(Nonnull<Statement*> s,
           TypeCheckExp(&for_stmt.loop_target(), inner_impl_scope));
 
       const Value& rhs = for_stmt.loop_target().static_type();
-      if (rhs.kind() == Value::Kind::StaticArrayType) {
-        CARBON_RETURN_IF_ERROR(
-            TypeCheckPattern(&for_stmt.variable_declaration(),
-                             &cast<StaticArrayType>(rhs).element_type(),
-                             inner_impl_scope, ValueCategory::Var));
-
-      } else {
-        return ProgramError(for_stmt.source_loc())
-               << "expected array type after in, found value of type " << rhs;
+      switch (rhs.kind()) {
+        case Value::Kind::StaticArrayType: {
+          CARBON_RETURN_IF_ERROR(
+              TypeCheckPattern(&for_stmt.variable_declaration(),
+                               &cast<StaticArrayType>(rhs).element_type(),
+                               inner_impl_scope, ValueCategory::Var));
+        } break;
+        case Value::Kind::NominalClassType: {
+          const auto witnesses = cast<NominalClassType>(rhs).witnesses();
+          const auto it = std::find_if(
+              witnesses.begin(), witnesses.end(), [](const auto& w) {
+                return cast<ConstraintType>(w.first->interface())
+                           ->self_binding()
+                           ->name() == "Iterate";
+              });
+          CARBON_CHECK(it == witnesses.end())
+              << "Type should implement `Iterate` interface.";
+        } break;
+        default:
+          return ProgramError(for_stmt.source_loc())
+                 << "expected array type after in, found value of type " << rhs;
       }
 
       CARBON_RETURN_IF_ERROR(TypeCheckStmt(&for_stmt.body(), inner_impl_scope));
@@ -4375,8 +4387,9 @@ auto TypeChecker::TypeCheckStmt(Nonnull<Statement*> s,
   }
 }
 
-// Returns true if we can statically verify that `match` is exhaustive, meaning
-// that one of its clauses will be executed for any possible operand value.
+// Returns true if we can statically verify that `match` is exhaustive,
+// meaning that one of its clauses will be executed for any possible operand
+// value.
 static auto IsExhaustive(const Match& match) -> bool {
   PatternMatrix matrix;
   for (const Match::Clause& clause : match.clauses()) {
@@ -4666,8 +4679,9 @@ auto TypeChecker::DeclareClassDeclaration(Nonnull<ClassDeclaration*> class_decl,
                  << ": method is declared virtual in base class, use `impl` "
                     "to override it.";
         }
-        // TODO: Error if declaring virtual method shadowing non-virtual method.
-        // See https://github.com/carbon-language/carbon-lang/issues/2355.
+        // TODO: Error if declaring virtual method shadowing non-virtual
+        // method. See
+        // https://github.com/carbon-language/carbon-lang/issues/2355.
         if (fun->virt_override() == VirtualOverride::None) {
           // Not added to the vtable.
           continue;
@@ -4693,9 +4707,9 @@ auto TypeChecker::DeclareClassDeclaration(Nonnull<ClassDeclaration*> class_decl,
   self->set_static_type(arena_->New<TypeType>());
   self->set_constant_value(self_type);
 
-  // The declarations of the members may refer to the class, so we must set the
-  // constant value of the class and its static type before we start processing
-  // the members.
+  // The declarations of the members may refer to the class, so we must set
+  // the constant value of the class and its static type before we start
+  // processing the members.
   if (class_decl->type_params().has_value()) {
     // TODO: The `enclosing_bindings` should be tracked in the parameterized
     // entity name so that they can be included in the eventual type.
@@ -4800,9 +4814,9 @@ auto TypeChecker::DeclareMixinDeclaration(Nonnull<MixinDeclaration*> mixin_decl,
 // EXPERIMENTAL MIXIN FEATURE
 // Checks to see if mixin_decl is already within collected_members_. If it is,
 // then the mixin has already been type checked before either while type
-// checking a previous mix declaration or while type checking the original mixin
-// declaration. If not, then every member declaration is type checked and then
-// added to collected_members_ under the mixin_decl key.
+// checking a previous mix declaration or while type checking the original
+// mixin declaration. If not, then every member declaration is type checked
+// and then added to collected_members_ under the mixin_decl key.
 auto TypeChecker::TypeCheckMixinDeclaration(
     Nonnull<const MixinDeclaration*> mixin_decl, const ImplScope& impl_scope)
     -> ErrorOr<Success> {
@@ -4950,8 +4964,8 @@ auto TypeChecker::DeclareConstraintTypeDeclaration(
     // The impl constraint says only that the direct members of the interface
     // are available. For any indirect constraints, we need to add separate
     // entries to the constraint type. This ensures that all indirect
-    // constraints are lifted to the top level so they can be accessed directly
-    // and resolved independently if necessary.
+    // constraints are lifted to the top level so they can be accessed
+    // directly and resolved independently if necessary.
     int index = builder.AddImplConstraint(
         {.type = builder.GetSelfType(),
          .interface = cast<InterfaceType>(constraint_type)});

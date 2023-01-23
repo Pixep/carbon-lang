@@ -700,6 +700,18 @@ class Optional(T:! type) {
   var element: OptionalElement(T);
 }
 
+
+// ------------------------
+// For loop.
+// ------------------------
+
+interface Iterate {
+  let ElementType:! type;
+  let CursorType:! type;
+  fn NewCursor[self: Self]() -> CursorType;
+  fn Next[self: Self](cursor: CursorType*) -> Optional(ElementType);
+}
+
 // ------------------------
 // Miscellaneous utilities.
 // ------------------------
