@@ -44,20 +44,21 @@ void RuntimeScope::Print(llvm::raw_ostream& out) const {
   out << "}";
 }
 
-void RuntimeScope::Bind(ValueNodeView value_node, Nonnull<const Value*> value) {
+void RuntimeScope::Bind(ValueNodeView value_node, Address address) {
+  CARBON_CHECK(!value_node.constant_value().has_value());
+  auto [it, success] =
+      locals_.insert({value_node, heap_->arena().New<LValue>(address)});
+  CARBON_CHECK(success) << "Duplicate definition of " << value_node.base();
+}
+
+void RuntimeScope::BindRValue(ValueNodeView value_node,
+                              Nonnull<const Value*> value) {
   CARBON_CHECK(!value_node.constant_value().has_value());
   CARBON_CHECK(value->kind() != Value::Kind::LValue);
-  auto allocation_id = heap_->GetAllocationId(value);
-  if (!allocation_id) {
-    auto id = heap_->AllocateValue(value);
-    auto [it, success] =
-        locals_.insert({value_node, heap_->arena().New<LValue>(Address(id))});
-    CARBON_CHECK(success) << "Duplicate definition of " << value_node.base();
-  } else {
-    auto [it, success] = locals_.insert(
-        {value_node, heap_->arena().New<LValue>(Address(*allocation_id))});
-    CARBON_CHECK(success) << "Duplicate definition of " << value_node.base();
-  }
+  const auto allocation_id = heap_->AllocateValue(value);
+  auto [it, success] = locals_.insert(
+      {value_node, heap_->arena().New<LValue>(Address(allocation_id))});
+  CARBON_CHECK(success) << "Duplicate definition of " << value_node.base();
 }
 
 void RuntimeScope::Initialize(ValueNodeView value_node,

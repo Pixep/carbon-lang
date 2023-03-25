@@ -167,7 +167,9 @@ class Interpreter {
       -> ErrorOr<Success>;
 
   auto CallDestructor(Nonnull<const DestructorDeclaration*> fun,
-                      Nonnull<const Value*> receiver) -> ErrorOr<Success>;
+                      Nonnull<const Value*> receiver,
+                      Nonnull<const LValue*> receiver_lvalue)
+      -> ErrorOr<Success>;
 
   void TraceState();
 
@@ -931,7 +933,8 @@ auto Interpreter::Convert(Nonnull<const Value*> value,
 }
 
 auto Interpreter::CallDestructor(Nonnull<const DestructorDeclaration*> fun,
-                                 Nonnull<const Value*> receiver)
+                                 Nonnull<const Value*> /*receiver*/,
+                                 Nonnull<const LValue*> receiver_lvalue)
     -> ErrorOr<Success> {
   const DestructorDeclaration& method = *fun;
   CARBON_CHECK(method.is_method());
@@ -942,7 +945,7 @@ auto Interpreter::CallDestructor(Nonnull<const DestructorDeclaration*> fun,
   const auto* p = &method.self_pattern().value();
   const auto& placeholder = cast<BindingPlaceholderValue>(*p);
   if (placeholder.value_node().has_value()) {
-    method_scope.Bind(*placeholder.value_node(), receiver);
+    method_scope.Bind(*placeholder.value_node(), receiver_lvalue->address());
   }
   CARBON_CHECK(method.body().has_value())
       << "Calling a method that's missing a body";
@@ -1023,8 +1026,12 @@ auto Interpreter::CallFunction(const CallExpression& call,
                 dyn_cast<BindingPlaceholderValue>(self_pattern)) {
           // TODO: move this logic into PatternMatch
           if (placeholder->value_node().has_value()) {
-            function_scope.Bind(*placeholder->value_node(),
-                                method_val->receiver());
+            if (const auto addr = method_val->receiver_address()) {
+              function_scope.Bind(*placeholder->value_node(), *addr);
+            } else {
+              function_scope.BindRValue(*placeholder->value_node(),
+                                        method_val->receiver());
+            }
           }
         } else {
           CARBON_CHECK(PatternMatch(self_pattern, method_val->receiver(),
@@ -1198,10 +1205,14 @@ auto Interpreter::StepExp() -> ErrorOr<Success> {
           } else {
             aggregate = act.results()[0];
           }
+          std::optional<Address> addr;
+          if (const auto* lvalue = dyn_cast<LValue>(act.results()[0])) {
+            addr = lvalue->address();
+          }
           CARBON_ASSIGN_OR_RETURN(
               Nonnull<const Value*> member_value,
               aggregate->GetElement(arena_, ElementPath(member),
-                                    exp.source_loc(), act.results()[0]));
+                                    exp.source_loc(), act.results()[0], addr));
           return todo_.FinishAction(member_value);
         }
       }
@@ -1271,9 +1282,14 @@ auto Interpreter::StepExp() -> ErrorOr<Success> {
           }
           ElementPath::Component field(&access.member().member(),
                                        found_in_interface, witness);
-          CARBON_ASSIGN_OR_RETURN(Nonnull<const Value*> member,
-                                  object->GetElement(arena_, ElementPath(field),
-                                                     exp.source_loc(), object));
+          std::optional<Address> addr;
+          if (const auto* lvalue = dyn_cast<LValue>(act.results()[0])) {
+            addr = lvalue->address();
+          }
+          CARBON_ASSIGN_OR_RETURN(
+              Nonnull<const Value*> member,
+              object->GetElement(arena_, ElementPath(field), exp.source_loc(),
+                                 object, addr));
           return todo_.FinishAction(member);
         }
       }
@@ -1287,9 +1303,10 @@ auto Interpreter::StepExp() -> ErrorOr<Success> {
         ElementPath::Component base_elt(&access.element(), std::nullopt,
                                         std::nullopt);
         const Value* value = act.results()[0];
-        CARBON_ASSIGN_OR_RETURN(Nonnull<const Value*> base_value,
-                                value->GetElement(arena_, ElementPath(base_elt),
-                                                  exp.source_loc(), value));
+        CARBON_ASSIGN_OR_RETURN(
+            Nonnull<const Value*> base_value,
+            value->GetElement(arena_, ElementPath(base_elt), exp.source_loc(),
+                              value, std::nullopt));
         return todo_.FinishAction(base_value);
       }
     }
@@ -2169,7 +2186,7 @@ auto Interpreter::StepDestroy() -> ErrorOr<Success> {
       if (act.pos() == 0) {
         // Run the destructor, if there is one.
         if (auto destructor = class_decl.destructor()) {
-          return CallDestructor(*destructor, class_obj);
+          return CallDestructor(*destructor, class_obj, destroy_act.lvalue());
         } else {
           return todo_.RunAgain();
         }
