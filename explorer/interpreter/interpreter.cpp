@@ -282,8 +282,12 @@ auto PatternMatch(Nonnull<const Value*> p, Nonnull<const Value*> v,
     case Value::Kind::BindingPlaceholderValue: {
       CARBON_CHECK(bindings.has_value());
       const auto& placeholder = cast<BindingPlaceholderValue>(*p);
-      if (placeholder.value_node().has_value()) {
-        (*bindings)->Initialize(*placeholder.value_node(), v);
+      if (const auto value_node = placeholder.value_node()) {
+        if (value_node->value_category() == ValueCategory::Let) {
+          (*bindings)->BindRValue(*value_node, v);
+        } else {
+          (*bindings)->Initialize(*value_node, v);
+        }
       }
       return true;
     }
