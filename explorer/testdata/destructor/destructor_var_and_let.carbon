@@ -30,6 +30,15 @@
 // CHECK:STDOUT: LetParamLetDeclaration-Passing RValue
 // CHECK:STDOUT: LetParamLetDeclaration-Passing RValue - end
 // CHECK-EMPTY:
+// CHECK:STDOUT: VarParamVarDeclaration-Passing RValue
+// CHECK:STDOUT: DESTRUCTOR CALLED
+// CHECK:STDOUT: DESTRUCTOR CALLED
+// CHECK:STDOUT: VarParamVarDeclaration-Passing RValue - end
+// CHECK-EMPTY:
+// CHECK:STDOUT: VarParamLetDeclaration-Passing RValue
+// CHECK:STDOUT: DESTRUCTOR CALLED
+// CHECK:STDOUT: VarParamLetDeclaration-Passing RValue - end
+// CHECK-EMPTY:
 // CHECK:STDOUT: DESTRUCTOR CALLED
 // CHECK:STDOUT: DESTRUCTOR CALLED
 // CHECK:STDOUT: result: 0
@@ -64,6 +73,14 @@ fn LetParamLetDeclaration(a: A) {
   let b: A = a;
 }
 
+fn VarParamVarDeclaration(var a: A) {
+  var b: A = a;
+}
+
+fn VarParamLetDeclaration(var a: A) {
+  let b: A = a;
+}
+
 fn Main() -> i32 {
   Print("VarDeclaration");
   VarDeclaration();
@@ -94,6 +111,14 @@ fn Main() -> i32 {
   Print("LetParamLetDeclaration-Passing RValue");
   LetParamLetDeclaration({});
   Print("LetParamLetDeclaration-Passing RValue - end\n");
+
+  Print("VarParamVarDeclaration-Passing RValue");
+  VarParamVarDeclaration({});
+  Print("VarParamVarDeclaration-Passing RValue - end\n");
+
+  Print("VarParamLetDeclaration-Passing RValue");
+  VarParamLetDeclaration({});
+  Print("VarParamLetDeclaration-Passing RValue - end\n");
 
   return 0;
 }
