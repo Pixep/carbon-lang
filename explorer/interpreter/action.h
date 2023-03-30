@@ -45,10 +45,10 @@ class RuntimeScope {
   void Print(llvm::raw_ostream& out) const;
   LLVM_DUMP_METHOD void Dump() const { Print(llvm::errs()); }
 
-  // Binds `address` to `value_node`.
+  // Binds `address` (l-value) to `value_node` without allocating local storage.
   void Bind(ValueNodeView value_node, Address address);
 
-  // TODO
+  // Binds `value` to `value_node` without allocating local storage.
   void BindRValue(ValueNodeView value_node, Nonnull<const Value*> value);
 
   // Allocates storage for `value_node` in `heap`, and initializes it with
@@ -60,18 +60,22 @@ class RuntimeScope {
   // scopes must not define the same name, and must be backed by the same Heap.
   void Merge(RuntimeScope other);
 
-  // Returns the local storage for value_node, if it has storage local to
-  // this scope.
+  // Given `value_node`:
+  // - returns its `LValue*` if bound to an allocated value in this scope
+  // (l-value),
+  // - returns a `Value*` if bound to a non-allocated value in this scope
+  // (r-value),
+  // - returns `nullptr` if not bound.
   auto Get(ValueNodeView value_node) const
-      -> std::optional<Nonnull<const LValue*>>;
+      -> std::optional<Nonnull<const Value*>>;
 
-  // Returns the local values in created order
+  // Returns the local values with allocation in created order
   auto allocations() const -> const std::vector<AllocationId>& {
     return allocations_;
   }
 
  private:
-  llvm::MapVector<ValueNodeView, Nonnull<const LValue*>,
+  llvm::MapVector<ValueNodeView, Nonnull<const Value*>,
                   std::map<ValueNodeView, unsigned>>
       locals_;
   std::vector<AllocationId> allocations_;

@@ -1874,6 +1874,7 @@ auto Interpreter::StepStmt() -> ErrorOr<Success> {
               Nonnull<const Value*> assigned_array_element,
               todo_.ValueOfNode(*(loop_var->value_node()), stmt.source_loc()));
 
+          CARBON_CHECK(assigned_array_element->kind() == Value::Kind::LValue);
           const auto* lvalue = cast<LValue>(assigned_array_element);
           CARBON_RETURN_IF_ERROR(heap_.Write(
               lvalue->address(), source_array->elements()[current_index],

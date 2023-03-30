@@ -55,9 +55,7 @@ void RuntimeScope::BindRValue(ValueNodeView value_node,
                               Nonnull<const Value*> value) {
   CARBON_CHECK(!value_node.constant_value().has_value());
   CARBON_CHECK(value->kind() != Value::Kind::LValue);
-  const auto allocation_id = heap_->AllocateValue(value);
-  auto [it, success] = locals_.insert(
-      {value_node, heap_->arena().New<LValue>(Address(allocation_id))});
+  auto [it, success] = locals_.insert({value_node, value});
   CARBON_CHECK(success) << "Duplicate definition of " << value_node.base();
 }
 
@@ -84,7 +82,7 @@ void RuntimeScope::Merge(RuntimeScope other) {
 }
 
 auto RuntimeScope::Get(ValueNodeView value_node) const
-    -> std::optional<Nonnull<const LValue*>> {
+    -> std::optional<Nonnull<const Value*>> {
   auto it = locals_.find(value_node);
   if (it != locals_.end()) {
     return it->second;
