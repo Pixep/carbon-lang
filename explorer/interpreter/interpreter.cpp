@@ -167,9 +167,7 @@ class Interpreter {
       -> ErrorOr<Success>;
 
   auto CallDestructor(Nonnull<const DestructorDeclaration*> fun,
-                      Nonnull<const Value*> receiver,
-                      Nonnull<const LValue*> receiver_lvalue)
-      -> ErrorOr<Success>;
+                      Nonnull<const LValue*> receiver) -> ErrorOr<Success>;
 
   void TraceState();
 
@@ -945,8 +943,7 @@ auto Interpreter::Convert(Nonnull<const Value*> value,
 }
 
 auto Interpreter::CallDestructor(Nonnull<const DestructorDeclaration*> fun,
-                                 Nonnull<const Value*> /*receiver*/,
-                                 Nonnull<const LValue*> receiver_lvalue)
+                                 Nonnull<const LValue*> receiver)
     -> ErrorOr<Success> {
   const DestructorDeclaration& method = *fun;
   CARBON_CHECK(method.is_method());
@@ -957,7 +954,7 @@ auto Interpreter::CallDestructor(Nonnull<const DestructorDeclaration*> fun,
   const auto* p = &method.self_pattern().value();
   const auto& placeholder = cast<BindingPlaceholderValue>(*p);
   if (placeholder.value_node().has_value()) {
-    method_scope.Bind(*placeholder.value_node(), receiver_lvalue->address());
+    method_scope.Bind(*placeholder.value_node(), receiver->address());
   }
   CARBON_CHECK(method.body().has_value())
       << "Calling a method that's missing a body";
@@ -2208,7 +2205,7 @@ auto Interpreter::StepDestroy() -> ErrorOr<Success> {
       if (act.pos() == 0) {
         // Run the destructor, if there is one.
         if (auto destructor = class_decl.destructor()) {
-          return CallDestructor(*destructor, class_obj, destroy_act.lvalue());
+          return CallDestructor(*destructor, destroy_act.lvalue());
         } else {
           return todo_.RunAgain();
         }
