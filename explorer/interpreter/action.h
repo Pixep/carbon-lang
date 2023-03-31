@@ -48,12 +48,12 @@ class RuntimeScope {
   // Binds `address` (l-value) to `value_node` without allocating local storage.
   void Bind(ValueNodeView value_node, Address address);
 
-  // Binds `value` to `value_node` without allocating local storage.
+  // Binds `value` to `value_node` without allocating local storage, making the
+  // value immutable.
   void BindRValue(ValueNodeView value_node, Nonnull<const Value*> value);
 
   // Allocates storage for `value_node` in `heap`, and initializes it with
   // `value`.
-  // TODO: Update existing callers to use Bind instead, where appropriate.
   void Initialize(ValueNodeView value_node, Nonnull<const Value*> value);
 
   // Transfers the names and allocations from `other` into *this. The two

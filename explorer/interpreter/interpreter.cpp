@@ -994,20 +994,20 @@ auto Interpreter::CallFunction(const CallExpression& call,
       for (const auto& [bind, val] : call.deduced_args()) {
         CARBON_ASSIGN_OR_RETURN(Nonnull<const Value*> inst_val,
                                 InstantiateType(val, call.source_loc()));
-        binding_scope.Initialize(bind->original(), inst_val);
+        binding_scope.BindRValue(bind->original(), inst_val);
       }
       for (const auto& [impl_bind, witness] : witnesses) {
-        binding_scope.Initialize(impl_bind->original(), witness);
+        binding_scope.BindRValue(impl_bind->original(), witness);
       }
 
       // Bring the arguments that are determined by the function value into
       // scope. This includes the arguments for the class of which the function
       // is a member.
       for (const auto& [bind, val] : func_val->type_args()) {
-        binding_scope.Initialize(bind->original(), val);
+        binding_scope.BindRValue(bind->original(), val);
       }
       for (const auto& [impl_bind, witness] : func_val->witnesses()) {
-        binding_scope.Initialize(impl_bind->original(), witness);
+        binding_scope.BindRValue(impl_bind->original(), witness);
       }
 
       // Enter the binding scope to make any deduced arguments visible before
@@ -1028,16 +1028,21 @@ auto Interpreter::CallFunction(const CallExpression& call,
         const auto* self_pattern = &function.self_pattern().value();
         if (const auto* placeholder =
                 dyn_cast<BindingPlaceholderValue>(self_pattern)) {
+          // Immutable self with `[self: Self]`
           // TODO: move this logic into PatternMatch
           if (placeholder->value_node().has_value()) {
             if (const auto addr = method_val->receiver_address()) {
               function_scope.Bind(*placeholder->value_node(), *addr);
             } else {
+              // TODO: We should bind to the address of the receiver to allow
+              // external effects to be visible within the method's scope.
               function_scope.BindRValue(*placeholder->value_node(),
                                         method_val->receiver());
             }
           }
         } else {
+          // Mutable self with `[addr self: Self*]`
+          CARBON_CHECK(isa<AddrValue>(self_pattern));
           CARBON_CHECK(PatternMatch(self_pattern, method_val->receiver(),
                                     call.source_loc(), &function_scope,
                                     generic_args, trace_stream_, this->arena_));
