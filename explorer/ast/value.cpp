@@ -264,7 +264,6 @@ auto Value::GetElement(Nonnull<Arena*> arena, const ElementPath& path,
   for (const ElementPath::Component& field : path.components_) {
     CARBON_ASSIGN_OR_RETURN(
         value,
-        // TODO: Is me_value and me_addr correct here?
         Carbon::GetElement(arena, value, field, source_loc, me_value, me_addr));
   }
   return value;

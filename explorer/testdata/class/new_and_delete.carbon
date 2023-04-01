@@ -6,6 +6,7 @@
 // RUN: %{explorer-run}
 // RUN: %{explorer-run-trace}
 // CHECK:STDOUT: Allocate A
+// CHECK:STDOUT: DESTRUCTOR A
 // CHECK:STDOUT: Delete A
 // CHECK:STDOUT: DESTRUCTOR A
 // CHECK:STDOUT: Return

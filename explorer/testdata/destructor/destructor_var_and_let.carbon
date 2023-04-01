@@ -10,24 +10,32 @@
 // CHECK:STDOUT: VarDeclaration - end
 // CHECK-EMPTY:
 // CHECK:STDOUT: LetDeclaration
+// CHECK:STDOUT: DESTRUCTOR CALLED
 // CHECK:STDOUT: LetDeclaration - end
 // CHECK-EMPTY:
 // CHECK:STDOUT: VarAndLetDeclaration
+// CHECK:STDOUT: DESTRUCTOR CALLED
 // CHECK:STDOUT: DESTRUCTOR CALLED
 // CHECK:STDOUT: VarAndLetDeclaration - end
 // CHECK-EMPTY:
 // CHECK:STDOUT: LetParamVarDeclaration-Passing LValue
 // CHECK:STDOUT: DESTRUCTOR CALLED
+// CHECK:STDOUT: DESTRUCTOR CALLED
 // CHECK:STDOUT: LetParamVarDeclaration-Passing LValue - end
 // CHECK-EMPTY:
 // CHECK:STDOUT: LetParamLetDeclaration-Passing LValue
+// CHECK:STDOUT: DESTRUCTOR CALLED
+// CHECK:STDOUT: DESTRUCTOR CALLED
 // CHECK:STDOUT: LetParamLetDeclaration-Passing LValue - end
 // CHECK-EMPTY:
 // CHECK:STDOUT: LetParamVarDeclaration-Passing RValue
 // CHECK:STDOUT: DESTRUCTOR CALLED
+// CHECK:STDOUT: DESTRUCTOR CALLED
 // CHECK:STDOUT: LetParamVarDeclaration-Passing RValue - end
 // CHECK-EMPTY:
 // CHECK:STDOUT: LetParamLetDeclaration-Passing RValue
+// CHECK:STDOUT: DESTRUCTOR CALLED
+// CHECK:STDOUT: DESTRUCTOR CALLED
 // CHECK:STDOUT: LetParamLetDeclaration-Passing RValue - end
 // CHECK-EMPTY:
 // CHECK:STDOUT: VarParamVarDeclaration-Passing RValue
@@ -36,6 +44,7 @@
 // CHECK:STDOUT: VarParamVarDeclaration-Passing RValue - end
 // CHECK-EMPTY:
 // CHECK:STDOUT: VarParamLetDeclaration-Passing RValue
+// CHECK:STDOUT: DESTRUCTOR CALLED
 // CHECK:STDOUT: DESTRUCTOR CALLED
 // CHECK:STDOUT: VarParamLetDeclaration-Passing RValue - end
 // CHECK-EMPTY:

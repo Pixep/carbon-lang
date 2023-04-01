@@ -51,8 +51,8 @@ void RuntimeScope::Bind(ValueNodeView value_node, Address address) {
   CARBON_CHECK(success) << "Duplicate definition of " << value_node.base();
 }
 
-void RuntimeScope::BindRValue(ValueNodeView value_node,
-                              Nonnull<const Value*> value) {
+void RuntimeScope::BindValue(ValueNodeView value_node,
+                             Nonnull<const Value*> value) {
   CARBON_CHECK(!value_node.constant_value().has_value());
   CARBON_CHECK(value->kind() != Value::Kind::LValue);
   auto [it, success] = locals_.insert({value_node, value});

@@ -281,11 +281,11 @@ auto PatternMatch(Nonnull<const Value*> p, Nonnull<const Value*> v,
       CARBON_CHECK(bindings.has_value());
       const auto& placeholder = cast<BindingPlaceholderValue>(*p);
       if (const auto value_node = placeholder.value_node()) {
-        if (value_node->value_category() == ValueCategory::Let) {
-          (*bindings)->BindRValue(*value_node, v);
-        } else {
-          (*bindings)->Initialize(*value_node, v);
-        }
+        // Copy even for `let` value category, because we cannot determine here
+        // if not destroying would be acceptable.
+        // TODO: Provide a way to know if 'v' is a temporary or not, to use
+        // `BindValue` instead when appropriate.
+        (*bindings)->Initialize(*value_node, v);
       }
       return true;
     }
@@ -991,20 +991,20 @@ auto Interpreter::CallFunction(const CallExpression& call,
       for (const auto& [bind, val] : call.deduced_args()) {
         CARBON_ASSIGN_OR_RETURN(Nonnull<const Value*> inst_val,
                                 InstantiateType(val, call.source_loc()));
-        binding_scope.BindRValue(bind->original(), inst_val);
+        binding_scope.BindValue(bind->original(), inst_val);
       }
       for (const auto& [impl_bind, witness] : witnesses) {
-        binding_scope.BindRValue(impl_bind->original(), witness);
+        binding_scope.BindValue(impl_bind->original(), witness);
       }
 
       // Bring the arguments that are determined by the function value into
       // scope. This includes the arguments for the class of which the function
       // is a member.
       for (const auto& [bind, val] : func_val->type_args()) {
-        binding_scope.BindRValue(bind->original(), val);
+        binding_scope.BindValue(bind->original(), val);
       }
       for (const auto& [impl_bind, witness] : func_val->witnesses()) {
-        binding_scope.BindRValue(impl_bind->original(), witness);
+        binding_scope.BindValue(impl_bind->original(), witness);
       }
 
       // Enter the binding scope to make any deduced arguments visible before
@@ -1033,8 +1033,8 @@ auto Interpreter::CallFunction(const CallExpression& call,
             } else {
               // TODO: We should bind to the address of the receiver to allow
               // external effects to be visible within the method's scope.
-              function_scope.BindRValue(*placeholder->value_node(),
-                                        method_val->receiver());
+              function_scope.BindValue(*placeholder->value_node(),
+                                       method_val->receiver());
             }
           }
         } else {
@@ -1211,10 +1211,10 @@ auto Interpreter::StepExp() -> ErrorOr<Success> {
           } else {
             aggregate = act.results()[0];
           }
-          std::optional<Address> addr;
-          if (const auto* lvalue = dyn_cast<LValue>(act.results()[0])) {
-            addr = lvalue->address();
-          }
+          const std::optional<Address> addr =
+              act.results()[0]->kind() == Value::Kind::LValue
+                  ? std::optional{cast<LValue>(act.results()[0])->address()}
+                  : std::nullopt;
           CARBON_ASSIGN_OR_RETURN(
               Nonnull<const Value*> member_value,
               aggregate->GetElement(arena_, ElementPath(member),
@@ -1288,10 +1288,10 @@ auto Interpreter::StepExp() -> ErrorOr<Success> {
           }
           ElementPath::Component field(&access.member().member(),
                                        found_in_interface, witness);
-          std::optional<Address> addr;
-          if (const auto* lvalue = dyn_cast<LValue>(act.results()[0])) {
-            addr = lvalue->address();
-          }
+          const std::optional<Address> addr =
+              act.results()[0]->kind() == Value::Kind::LValue
+                  ? std::optional{cast<LValue>(act.results()[0])->address()}
+                  : std::nullopt;
           CARBON_ASSIGN_OR_RETURN(
               Nonnull<const Value*> member,
               object->GetElement(arena_, ElementPath(field), exp.source_loc(),
