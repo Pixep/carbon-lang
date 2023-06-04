@@ -1126,10 +1126,8 @@ auto Interpreter::CallFunction(const CallExpression& call,
       // TODO: Allocate as needed
       // if (call.expression_category() == ExpressionCategory::Initializing &&
       //    !function.return_term().is_omitted()*/) {
-      CARBON_CHECK(call.expression_category() ==
-                   ExpressionCategory::Initializing)
-          << "Call expression must be an InitializingExpresison";
-      if (support_initializing_expr) {
+      if (call.expression_category() == ExpressionCategory::Initializing &&
+          support_initializing_expr) {
         const auto allocation_id = heap_.AllocateValue(
             arena_->New<UninitializedValue>(&call.static_type()));
         (*todo_.CurrentAction().scope())
@@ -1281,7 +1279,7 @@ auto Interpreter::StepInstantiateType() -> ErrorOr<Success> {
 }
 
 auto Interpreter::StepExp() -> ErrorOr<Success> {
-  Action& act = todo_.CurrentAction();
+  auto& act = cast<ExpressionAction>(todo_.CurrentAction());
   const Expression& exp = cast<ExpressionAction>(act).expression();
   if (trace_stream_->is_enabled()) {
     *trace_stream_ << "--- step exp " << exp << " ." << act.pos() << "."
@@ -1645,9 +1643,9 @@ auto Interpreter::StepExp() -> ErrorOr<Success> {
             ++i;
           }
         }
-        return CallFunction(
-            call, act.results()[0], act.results()[1], std::move(witnesses),
-            cast<ExpressionAction>(act).support_initializing_expr());
+        return CallFunction(call, act.results()[0], act.results()[1],
+                            std::move(witnesses),
+                            act.support_initializing_expr());
       } else if (act.pos() == 3 + static_cast<int>(num_witnesses)) {
         if (act.results().size() < 3 + num_witnesses) {
           // Control fell through without explicit return.

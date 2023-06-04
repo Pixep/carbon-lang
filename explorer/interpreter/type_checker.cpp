@@ -2246,7 +2246,8 @@ class TypeChecker::SubstituteTransform
                                                  &fn_type->return_type()));
     return type_checker_->arena_->New<FunctionType>(
         param, std::move(generic_parameters), ret, std::move(deduced_bindings),
-        std::move(subst_bindings).TakeImplBindings());
+        std::move(subst_bindings).TakeImplBindings(),
+        fn_type->is_initializing());
   }
 
   // Substituting into a `ConstraintType` needs special handling if we replace
@@ -3589,7 +3590,11 @@ auto TypeChecker::TypeCheckExpImpl(Nonnull<Expression*> e,
               Nonnull<const Value*> return_type,
               Substitute(call.bindings(), &fun_t.return_type()));
           call.set_static_type(return_type);
-          call.set_expression_category(ExpressionCategory::Initializing);
+          // TODO: Find right logic here.
+          call.set_expression_category(fun_t.is_initializing()
+                                           ? ExpressionCategory::Initializing
+                                           : ExpressionCategory::Value);
+          // }
           return Success();
         }
         case Value::Kind::TypeOfParameterizedEntityName: {
@@ -3622,7 +3627,6 @@ auto TypeChecker::TypeCheckExpImpl(Nonnull<Expression*> e,
                   ChoiceDeclaration>(param_name.declaration()))
               << "unknown type of ParameterizedEntityName for " << param_name;
           call.set_static_type(arena_->New<TypeType>());
-          // TODO: Initializing expression??
           call.set_expression_category(ExpressionCategory::Value);
           return Success();
         }
@@ -4681,22 +4685,6 @@ auto TypeChecker::TypeCheckStmt(Nonnull<Statement*> s,
             ImplicitlyConvert("initializer of variable", impl_scope,
                               &var.init(), &var.pattern().static_type()));
         var.set_init(converted_init);
-
-        if (var.init().expression_category() ==
-            ExpressionCategory::Initializing) {
-          // TODO: Shouldn't be CallExpression only
-          // if (var.init().kind() == ExpressionKind::CallExpression) {
-          //   auto& call = cast<CallExpression>(var.init());
-          //   call.if (const auto* placeholder =
-          //                dyn_cast<BindingPlaceholderValue>(
-          //                    &var.pattern().value());
-          //            placeholder) {
-          //     // TODO: Can placeholder be null? Can value_node be null?
-          //     // TODO: Don't bind if no return value
-          //     CARBON_CHECK(placeholder->value_node()) << "uh oh";
-          //     call.set_initialized_location(*placeholder->value_node());
-          //   }
-        }
       }
       return Success();
     }
@@ -4964,7 +4952,7 @@ auto TypeChecker::DeclareCallableDeclaration(Nonnull<CallableDeclaration*> f,
   f->set_static_type(arena_->New<FunctionType>(
       &f->param_pattern().static_type(), std::move(generic_parameters),
       &f->return_term().static_type(), std::move(deduced_bindings),
-      std::move(impl_bindings)));
+      std::move(impl_bindings), /*is_initializing*/ true));
   switch (f->kind()) {
     case DeclarationKind::FunctionDeclaration:
       // TODO: Should we pass in the bindings from the enclosing scope?
