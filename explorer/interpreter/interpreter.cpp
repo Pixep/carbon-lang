@@ -2229,22 +2229,27 @@ auto Interpreter::StepStmt() -> ErrorOr<Success> {
         if (definition.has_init()) {
           // Value returned is a location, read it first.
           if (definition.init().expression_category() ==
-              ExpressionCategory::Initializing) {
-            Nonnull<const Value*> returned_value;
-            CARBON_CHECK(act.results()[0]->kind() ==
-                         Value::Kind::LocationValue);
+                  ExpressionCategory::Initializing &&
+              act.results()[0]->kind() == Value::Kind::LocationValue) {
             v_location = cast<LocationValue>(act.results()[0]);
             // Bind even if a conversion is necessary.
             scope.BindAllocationToScope((*v_location)->address());
             CARBON_ASSIGN_OR_RETURN(
-                returned_value,
+                Nonnull<const Value*> returned_value,
                 heap_.Read((*v_location)->address(), definition.source_loc()));
             CARBON_ASSIGN_OR_RETURN(
                 v, Convert(returned_value, dest_type, stmt.source_loc()));
             if (v != returned_value) {
+              // If a conversion happened, adjust the expression category.
               expr_category = ExpressionCategory::Value;
             }
           } else {
+            if (definition.init().expression_category() ==
+                ExpressionCategory::Initializing) {
+              // TODO: Either update the category before, or capture dangling
+              // location
+            }
+            expr_category = ExpressionCategory::Value;
             CARBON_ASSIGN_OR_RETURN(
                 v, Convert(act.results()[0], dest_type, stmt.source_loc()));
           }
